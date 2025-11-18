@@ -1,5 +1,4 @@
-use super::DataSize;
-use core::mem::size_of;
+use crate::DataSize;
 
 impl<T> DataSize for futures::channel::oneshot::Sender<T> {
     const IS_DYNAMIC: bool = false;
@@ -11,8 +10,8 @@ impl<T> DataSize for futures::channel::oneshot::Sender<T> {
     }
 }
 
-// Note: We attribute the value to be sent/received to the receiver. This is still wildly inaccurate
-// though.
+// Note: We attribute the value to be sent/received to the receiver. This is
+// still wildly inaccurate though.
 
 impl<T> DataSize for futures::channel::oneshot::Receiver<T> {
     const IS_DYNAMIC: bool = false;
