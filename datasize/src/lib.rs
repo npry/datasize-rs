@@ -19,11 +19,12 @@
 //! guess the size of its heap allocation:
 //!
 //! ```rust
+//! # #[cfg(feature = "alloc")] {
 //! use datasize::data_size;
 //!
 //! let data: Vec<u64> = vec![1, 2, 3];
-//! #[cfg(feature = "std")]
 //! assert_eq!(data_size(&data), 24);
+//! # }
 //! ```
 //!
 //! Types implementing the trait also provide two additional constants, `IS_DYNAMIC` and
@@ -34,9 +35,10 @@
 //! ```rust
 //! use datasize::DataSize;
 //!
-//! #[cfg(feature = "std")]
+//! # #[cfg(feature = "alloc")] {
 //! // A `Vec` of any kind may have elements added or removed, so it changes size.
 //! assert!(Vec::<u64>::IS_DYNAMIC);
+//! # }
 //!
 //! // The elements of type `u64` in it are not dynamic. This allows the implementation to
 //! // simply estimate the size as number_of_elements * size_of::<u64>.
@@ -49,12 +51,12 @@
 //!
 //!
 //! ```rust
+//! # #[cfg(feature = "alloc")] {
 //! use datasize::DataSize;
 //!
-//! #[cfg(feature = "std")]
 //! assert_eq!(Box::<u64>::STATIC_HEAP_SIZE, 8);
-//! #[cfg(feature = "std")]
 //! assert!(!Box::<u64>::IS_DYNAMIC);
+//! # }
 //! ```
 //!
 //! # Overriding derived data size calculation for single fields.
@@ -65,6 +67,7 @@
 //! function:
 //!
 //! ```rust
+//! # #[cfg(feature = "alloc")] {
 //! use datasize::DataSize;
 //!
 //! // Let's pretend this type is from a foreign crate.
@@ -75,13 +78,13 @@
 //!     value.len() * 512
 //! }
 //!
-//! #[cfg(feature = "std")]
 //! #[derive(DataSize)]
 //! struct MyStruct {
 //!     items: Vec<u32>,
 //!     #[data_size(with = estimate_third_party_type)]
 //!     other_stuff: Vec<ThirdPartyType>,
 //! }
+//! # }
 //! ```
 //!
 //! This automatically marks the whole struct as always dynamic, so the custom estimation function
@@ -92,6 +95,7 @@
 //! The `DataSize` trait can be implemented for custom types manually:
 //!
 //! ```rust
+//! # #[cfg(feature = "alloc")] {
 //! # use datasize::{DataSize, data_size};
 //! struct MyType {
 //!     items: Vec<i64>,
@@ -99,7 +103,6 @@
 //!     counter: Box<u64>,
 //! }
 //!
-//! #[cfg(feature = "std")]
 //! impl DataSize for MyType {
 //!     // `MyType` contains a `Vec`, so `IS_DYNAMIC` is set to true.
 //!     const IS_DYNAMIC: bool = true;
@@ -120,32 +123,31 @@
 //!     counter: Box::new(42),
 //! };
 //!
-//! #[cfg(feature = "std")]
 //! // Three i64 and one u64 on the heap sum up to 32 bytes:
 //! assert_eq!(data_size(&my_data), 32);
+//! # }
 //! ```
 //!
 //! Since implementing this for `struct` types is cumbersome and repetitive, the crate provides a
 //! `DataSize` macro for convenience:
 //!
 //! ```
+//! # #[cfg(feature = "alloc")] {
 //! # use datasize::{DataSize, data_size};
 //! // Equivalent to the manual implementation above:
-//! #[cfg(feature = "std")]
 //! #[derive(DataSize)]
 //! struct MyType {
 //!     items: Vec<i64>,
 //!     flag: bool,
 //!     counter: Box<u64>,
 //! }
-//! # #[cfg(feature = "std")]
 //! # let my_data = MyType {
 //! #     items: vec![1, 2, 3],
 //! #     flag: true,
 //! #     counter: Box::new(42),
 //! # };
-//! # #[cfg(feature = "std")]
 //! # assert_eq!(data_size(&my_data), 32);
+//! # }
 //! ```
 //!
 //! See the `DataSize` macro documentation in the `datasize_derive` crate for details.
@@ -218,17 +220,29 @@
 //! { ... }
 //! ```
 
-#![cfg_attr(not(feature = "std"), no_std)]
+#![no_std]
 #![allow(clippy::assertions_on_constants)]
 
+#[cfg(feature = "alloc")]
+extern crate alloc;
+
+#[cfg(feature = "std")]
+extern crate std;
+
+#[cfg(feature = "alloc")]
+#[path = "alloc.rs"]
+mod _alloc;
+#[path = "core.rs"]
+mod _core;
+#[cfg(feature = "std")]
+#[path = "std.rs"]
+mod _std;
 #[cfg(feature = "fake_clock-types")]
 mod fake_clock;
 #[cfg(feature = "futures-types")]
 mod futures;
 #[cfg(feature = "smallvec-types")]
 mod smallvec;
-#[cfg(feature = "std")]
-mod std;
 #[cfg(feature = "tokio-types")]
 mod tokio;
 
@@ -312,7 +326,7 @@ where
 #[macro_export]
 macro_rules! non_dynamic_const_heap_size {
     ($($ty:ty)*, $sz:expr) => {
-        $(impl DataSize for $ty {
+        $(impl $crate::DataSize for $ty {
             const IS_DYNAMIC: bool = false;
             const STATIC_HEAP_SIZE: usize = $sz;
 
@@ -565,40 +579,34 @@ mod tests {
         assert_eq!(Result::<u8, u16>::STATIC_HEAP_SIZE, 0);
         assert!(!Result::<u8, u16>::IS_DYNAMIC);
 
-        #[cfg(feature = "std")]
-        assert_eq!(Result::<u8, Box<u16>>::STATIC_HEAP_SIZE, 0);
-        #[cfg(feature = "std")]
-        assert!(Result::<u8, Box<u16>>::IS_DYNAMIC);
+        #[cfg(feature = "alloc")]
+        {
+            use alloc::{
+                boxed::Box,
+                vec::Vec,
+            };
 
-        #[cfg(feature = "std")]
-        assert_eq!(Result::<Box<u8>, u16>::STATIC_HEAP_SIZE, 0);
-        #[cfg(feature = "std")]
-        assert!(Result::<Box<u8>, u16>::IS_DYNAMIC);
+            assert_eq!(Result::<u8, Box<u16>>::STATIC_HEAP_SIZE, 0);
+            assert!(Result::<u8, Box<u16>>::IS_DYNAMIC);
 
-        #[cfg(feature = "std")]
-        assert_eq!(Result::<Box<u8>, Box<u16>>::STATIC_HEAP_SIZE, 1);
-        #[cfg(feature = "std")]
-        assert!(Result::<Box<u8>, Box<u16>>::IS_DYNAMIC);
+            assert_eq!(Result::<Box<u8>, u16>::STATIC_HEAP_SIZE, 0);
+            assert!(Result::<Box<u8>, u16>::IS_DYNAMIC);
 
-        #[cfg(feature = "std")]
-        assert_eq!(Result::<Box<u16>, Box<u16>>::STATIC_HEAP_SIZE, 2);
-        #[cfg(feature = "std")]
-        assert!(!Result::<Box<u16>, Box<u16>>::IS_DYNAMIC);
+            assert_eq!(Result::<Box<u8>, Box<u16>>::STATIC_HEAP_SIZE, 1);
+            assert!(Result::<Box<u8>, Box<u16>>::IS_DYNAMIC);
 
-        #[cfg(feature = "std")]
-        assert_eq!(Result::<u16, Vec<u16>>::STATIC_HEAP_SIZE, 0);
-        #[cfg(feature = "std")]
-        assert!(Result::<u16, Vec<u16>>::IS_DYNAMIC);
+            assert_eq!(Result::<Box<u16>, Box<u16>>::STATIC_HEAP_SIZE, 2);
+            assert!(!Result::<Box<u16>, Box<u16>>::IS_DYNAMIC);
 
-        #[cfg(feature = "std")]
-        assert_eq!(Result::<Vec<u16>, u16>::STATIC_HEAP_SIZE, 0);
-        #[cfg(feature = "std")]
-        assert!(Result::<Vec<u16>, u16>::IS_DYNAMIC);
+            assert_eq!(Result::<u16, Vec<u16>>::STATIC_HEAP_SIZE, 0);
+            assert!(Result::<u16, Vec<u16>>::IS_DYNAMIC);
 
-        #[cfg(feature = "std")]
-        assert_eq!(Result::<Vec<u16>, Vec<u16>>::STATIC_HEAP_SIZE, 0);
-        #[cfg(feature = "std")]
-        assert!(Result::<Vec<u16>, Vec<u16>>::IS_DYNAMIC);
+            assert_eq!(Result::<Vec<u16>, u16>::STATIC_HEAP_SIZE, 0);
+            assert!(Result::<Vec<u16>, u16>::IS_DYNAMIC);
+
+            assert_eq!(Result::<Vec<u16>, Vec<u16>>::STATIC_HEAP_SIZE, 0);
+            assert!(Result::<Vec<u16>, Vec<u16>>::IS_DYNAMIC);
+        }
     }
 
     #[test]
@@ -632,6 +640,7 @@ mod tests {
 
     #[test]
     fn macro_does_not_panic_on_foreign_attributes() {
+        #[allow(unused)]
         #[derive(DataSize)]
         /// This docstring shows up as `#[doc = ""]`...
         struct Foo {
